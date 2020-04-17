@@ -37,7 +37,8 @@ const userSchema = new mongoose.Schema({
     password: String,
     googleId: String,
     facebookId: String,
-    username: String
+    username: String,
+    secret: String
 });
 
 userSchema.plugin(passportLocalMongoose);
@@ -65,10 +66,12 @@ passport.use(new GoogleStrategy({
     userProfileURL: "https://www.googleapis.com/oauth2/v3/userinfo"
   },
   function(accessToken, refreshToken, profile, cb) {
-    console.log(profile);
+    // console.log(profile);
     
     User.findOrCreate({ googleId: profile.id }, function (err, user) {
-      return cb(err, user);
+        user.username = profile.displayName;
+        user.save();
+        return cb(err, user);
     });
   }
 ));
@@ -80,10 +83,12 @@ passport.use(new FacebookStrategy({
     callbackURL: "http://localhost:3000/auth/facebook/secrets"
   },
   function(accessToken, refreshToken, profile, cb) {
-    console.log(profile);
+    // console.log(profile);
 
     User.findOrCreate({ facebookId: profile.id }, function (err, user) {
-      return cb(err, user);
+        user.username = profile.displayName;
+        user.save();
+        return cb(err, user);
     });
   }
 ));
@@ -124,9 +129,39 @@ app.get('/register', (req, res) => {
 });
 
 app.get('/secrets', (req, res) => {
+    // find all users w/ secret field not null
+    User.find({'secret': {$ne:null}}, (err, foundUsers) => {
+        if (err) console.log(err);
+        else {
+            res.render('secrets', {usersWithSecrets: foundUsers})
+        }
+    });
+});
+
+app.get('/submit', (req, res) => {
     if (req.isAuthenticated()) {
-        res.render('secrets');
+        res.render('submit');
     } else res.redirect('/login');
+});
+
+app.post('/submit', (req, res) => {
+    const submittedSecret = req.body.secret;
+
+    // req obj will save all user info in user property
+    // console.log(req.user.id);
+
+    // find & update Secret submitted
+    User.findById(req.user.id, (err, foundUser) => {
+        if (err) console.log(err);
+        else {
+            if (foundUser) {
+                foundUser.secret = submittedSecret;
+                foundUser.save(() => {
+                    res.redirect('/secrets');
+                });
+            }
+        }
+    });
 });
 
 app.get('/logout', (req, res) => {
@@ -163,18 +198,8 @@ app.post('/login', (req, res) => {
                 res.redirect('/secrets');
             });    
         }
-        
     });
 });
-
-app.get('/secrets', (req, res) => {
-    res.render('secrets');
-});
-
-app.get('/submit', (req, res) => {
-    res.render('submit');
-});
-
 
 
 app.listen(port, () => {
